@@ -39,9 +39,9 @@
  *
  *  @file activations.hpp
  *
- *  Library of templated HLS classes for BNN deployment. 
- *  This file lists a set of classes used to implement  
- *  threshold memory in neural network. 
+ *  Library of templated HLS classes for BNN deployment.
+ *  This file lists a set of classes used to implement
+ *  threshold memory in neural network.
  *
  *  This project has received funding from the European Union's Framework
  *  Programme for Research and Innovation Horizon 2020 (2014-2020) under
@@ -66,7 +66,7 @@ namespace comp{
     struct greater_equal;
 
   template<typename input_type = void>
-    struct less_equal;	
+    struct less_equal;
 
   template<typename input_type>
     struct greater : public binary_function<input_type, input_type, ap_uint<1>> {
@@ -95,7 +95,7 @@ namespace comp{
       operator()(const input_type& a, const input_type& b) const
       { return a <= b; }
     };
-	
+
 }
 
 /**
@@ -165,12 +165,12 @@ public:
  * The default comparison returns true if the threshold value defined for
  * the indexed row is smaller than the passed accumulator value.
  */
-template<unsigned NF, unsigned PE, unsigned NumTH, 
+template<unsigned NF, unsigned PE, unsigned NumTH,
 	 typename TA, typename TR, int ActVal = 0, typename Compare = comp::less<TA>>
 class ThresholdsActivation {
 public:
   TA m_thresholds[PE][NF][NumTH];
-  
+
 public:
   TA init(unsigned const  nf, unsigned const  pe) const {
 #pragma HLS inline
@@ -196,7 +196,7 @@ public:
  * The parameters are taken from an array indexed by output row.
  * It is currently public to allow direct initialization and
  * to make its name accessible for top-level HLS pragmas.
- * 
+ *
  * \tparam NF    First dimension of the parameter matrix
  * \tparam PE    Second dimension of the parameter matrix
  * \tparam TI    DataType of input layer values
@@ -226,7 +226,7 @@ public:
 /*!
  * \brief Thresholding function for multiple images
  *
- * The function performs thresholds comparison with input activation vector, 
+ * The function performs thresholds comparison with input activation vector,
  * and generating output based on the comparison results
  *
  * \tparam ImgDim         Width and Heigth of the Input Feature Map (assumed square)
@@ -262,7 +262,7 @@ void Thresholding_Batch(hls::stream<TI> &in,
 
   // everything merged into a common iteration space (one "big" loop instead
   // of smaller nested loops) to get the pipelinening the way we want
-  for (unsigned i = 0; i < reps * ImgDim * ImgDim * NF; i++)
+  for (unsigned i = 0; i < reps * ImgDim * NF; i++)
   {
     #pragma HLS PIPELINE II=1
 
