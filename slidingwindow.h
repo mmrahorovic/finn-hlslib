@@ -1374,29 +1374,19 @@ void ConvolutionInputGenerator_NonSquare_EXPERIMENT(
 			else { // Read & write & update
 				// Read input buffer
 				if (inp < IFMDim_x*multiplying_factor){
-					if (inp < buffer_size){
+					if (inp < buffer_size || internal_counter >= buffer_size-multiplying_factor){
 						ap_uint<SIMD*Input_precision> inElem;
 						inElem = in.read();
 						index_write = inp % (buffer_size);
 						inputBuf[index_write] = inElem;
 						inp++;
 						internal_counter++;
+						if (internal_counter==buffer_size){
+							internal_counter=0;
+						}
 					}
 					else{
-						if (internal_counter >= buffer_size-multiplying_factor){
-							ap_uint<SIMD*Input_precision> inElem;
-							inElem = in.read();
-							index_write = inp % (buffer_size);
-							inputBuf[index_write] = inElem;
-							inp++;
-							internal_counter++;
-							if (internal_counter==buffer_size){
-								internal_counter=0;
-							}
-						}
-						else{
-							internal_counter++;
-						}
+						internal_counter++;
 					}
 				}
 
