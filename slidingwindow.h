@@ -1353,44 +1353,44 @@ void ConvolutionInputGenerator_NonSquare_EXPERIMENT(
 		R const &r) {
 	CASSERT_DATAFLOW(IFMChannels % SIMD == 0);
 	const unsigned int multiplying_factor = IFMChannels/SIMD;
-	ap_uint<SIMD*Input_precision> inputBuf[ConvKernelDim_x * IFMChannels];
+	const unsigned int buffer_size = ConvKernelDim_x * multiplying_factor;
+	ap_uint<SIMD*Input_precision> inputBuf[buffer_size];
 #pragma HLS ARRAY_PARTITION variable=inputBuf complete dim=1
 	memory_resource(inputBuf, r);
-	const unsigned int cycles_write_block = (OFMDim_x * ConvKernelDim_x * IFMChannels);
-	const unsigned int cycles_read_block = IFMChannels*(ConvKernelDim_x-1)-(ConvKernelDim_x-1);
-	const unsigned int baseIter = cycles_read_block + cycles_write_block;
-	unsigned int current_line = 0;
+	//const unsigned int cycles_write_block = (OFMDim_x * buffer_size);
+	const unsigned int cycles_read_block = multiplying_factor*(ConvKernelDim_x-1)-(ConvKernelDim_x-1);
+	const unsigned int baseIter = cycles_read_block + (OFMDim_x * buffer_size);
 	unsigned int inp = 0, index_write=0, index_read = 0, j = 0, internal_counter = 0;
 #pragma HLS reset variable=inp
 	for (unsigned int count_image = 0; count_image < numReps; count_image++) {
 		for (unsigned int i = 0; i < baseIter; i++) {
 			#pragma HLS PIPELINE II=1
-			if (current_line < cycles_read_block) {// Initial buffer of ConvKernelDim lines
+			if (inp < cycles_read_block) {// Initial buffer of ConvKernelDim lines
 				ap_uint<SIMD*Input_precision> inElem;
 				inElem = in.read();
-				inputBuf[current_line] = inElem;
-				current_line++;
+				inputBuf[inp] = inElem;
+				inp++;
 			}
 			else { // Read & write & update
 				// Read input buffer
-				if (current_line < IFMDim_x*IFMChannels){
-					if (current_line < ConvKernelDim_x * IFMChannels){
+				if (inp < IFMDim_x*multiplying_factor){
+					if (inp < buffer_size){
 						ap_uint<SIMD*Input_precision> inElem;
 						inElem = in.read();
-						index_write = current_line % (ConvKernelDim_x * IFMChannels);
+						index_write = inp % (buffer_size);
 						inputBuf[index_write] = inElem;
-						current_line++;
+						inp++;
 						internal_counter++;
 					}
 					else{
-						if (internal_counter >= ConvKernelDim_x*IFMChannels-IFMChannels){
+						if (internal_counter >= buffer_size-multiplying_factor){
 							ap_uint<SIMD*Input_precision> inElem;
 							inElem = in.read();
-							index_write = current_line % (ConvKernelDim_x * IFMChannels);
+							index_write = inp % (buffer_size);
 							inputBuf[index_write] = inElem;
-							current_line++;
+							inp++;
 							internal_counter++;
-							if (internal_counter==ConvKernelDim_x*IFMChannels){
+							if (internal_counter==buffer_size){
 								internal_counter=0;
 							}
 						}
@@ -1406,14 +1406,14 @@ void ConvolutionInputGenerator_NonSquare_EXPERIMENT(
 
 				// Update write index pointer
 				if (j < ConvKernelDim_x-1){
-					index_read = index_read + IFMChannels;
+					index_read = index_read + multiplying_factor;
 					j++;
 				}
 				else{
-					index_read = index_read + (IFMChannels+1);
+					index_read = index_read + (multiplying_factor+1);
 					j=0;
 				}
-				index_read = index_read%(ConvKernelDim_x*IFMChannels);
+				index_read = index_read%(buffer_size);
 
 				}
 		} // End base_iter
