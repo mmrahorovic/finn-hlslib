@@ -1241,18 +1241,16 @@ CASSERT_DATAFLOW(IFMChannels % SIMD == 0);
  * \param r			  			Resource type for the hardware implementation of the memory block
  */
 template<unsigned int ConvKernelDim_x,
-		 unsigned int ConvKernelDim_y,
 		 unsigned int IFMChannels,
 		 unsigned int Input_precision,
 		 unsigned int IFMDim_x,
-		 unsigned int IFMDim_y,
 		 unsigned int OFMDim_x,
 		 unsigned int OFMDim_y,
 		 unsigned int SIMD,
 		 unsigned int Stride_x,
 		 unsigned int Stride_y,
 		 typename R>
-void ConvolutionInputGenerator_NonSquare(
+void ConvolutionInputGenerator_NonSquare_1D(
 		stream<ap_uint<SIMD*Input_precision> > & in,
 		stream<ap_uint<SIMD*Input_precision> > & out,
 		const unsigned int numReps,
@@ -1263,7 +1261,7 @@ void ConvolutionInputGenerator_NonSquare(
 	ap_uint<SIMD*Input_precision> inputBuf[Stride_x * IFMDim_x * multiplying_factor];
 #pragma HLS ARRAY_PARTITION variable=inputBuf complete dim=1
 	memory_resource(inputBuf, r);
-	const unsigned int cycles_write_block = (OFMDim_x * ConvKernelDim_x * ConvKernelDim_y * multiplying_factor);
+	const unsigned int cycles_write_block = (OFMDim_x * ConvKernelDim_x * multiplying_factor);
 	const unsigned int cycles_read_block = Stride_x * IFMDim_x * multiplying_factor;
 	const unsigned int max_cycles = MAX(cycles_write_block,cycles_read_block);
 	const unsigned int baseIter = ConvKernelDim_x*multiplying_factor + cycles_write_block;
@@ -1281,22 +1279,22 @@ void ConvolutionInputGenerator_NonSquare(
 				inp++;
 			}
 			else {
-					unsigned int current_line_in_block = (ofm_x*Stride_x + k_x)*multiplying_factor + count_simd;
-					ap_uint<SIMD*Input_precision> outElem = inputBuf[(current_line_in_block)];
-					out.write(outElem);
-					count_simd++;
-					if (count_simd == multiplying_factor) {
-						count_simd=0;
-						k_x++;
-						if (k_x == ConvKernelDim_x) {
-							k_x = 0;
-							ofm_x ++;
-							if (ofm_x == OFMDim_x) {
-								ofm_x = 0;
-								inp = 0;
-							}
+				unsigned int current_line_in_block = (ofm_x*Stride_x + k_x)*multiplying_factor + count_simd;
+				ap_uint<SIMD*Input_precision> outElem = inputBuf[(current_line_in_block)];
+				out.write(outElem);
+				count_simd++;
+				if (count_simd == multiplying_factor) {
+					count_simd=0;
+					k_x++;
+					if (k_x == ConvKernelDim_x) {
+						k_x = 0;
+						ofm_x ++;
+						if (ofm_x == OFMDim_x) {
+							ofm_x = 0;
+							inp = 0;
 						}
 					}
+				}
 				if (current_line < Stride_x * IFMDim_x * multiplying_factor) { // In parallel we write in the buffer, in the current block write if we still need to
 					ap_uint<SIMD*Input_precision> inElem;
 					inElem = in.read();
@@ -1430,80 +1428,68 @@ void ConvolutionInputGenerator_1D_custom(
  * \param r			  			Resource type for the hardware implementation of the memory block
  */
 template<unsigned int ConvKernelDim_x,
-		 unsigned int ConvKernelDim_y,
 		 unsigned int IFMChannels,
 		 unsigned int Input_precision,
 		 unsigned int IFMDim_x,
-		 unsigned int IFMDim_y,
 		 unsigned int OFMDim_x,
-		 unsigned int OFMDim_y,
 		 unsigned int SIMD,
 		 unsigned int Stride_x,
-		 unsigned int Stride_y,
 		 typename R>
-void ConvolutionInputGenerator_NonSquare_dws(
+void ConvolutionInputGenerator_NonSquare_dws_1D(
 	stream<ap_uint<SIMD*Input_precision> > & in,
 	stream<ap_uint<SIMD*Input_precision> > & out,
 	const unsigned int numReps,
 	R const &r) {
-		CASSERT_DATAFLOW(IFMChannels % SIMD == 0);
-		const unsigned int multiplying_factor = IFMChannels/SIMD;
-		const unsigned int number_blocks = ConvKernelDim_y/Stride_y + 1 ;
-		ap_uint<SIMD*Input_precision> inputBuf[Stride_x * IFMDim_x * multiplying_factor];
-
-		#pragma HLS ARRAY_PARTITION variable=inputBuf complete dim=1
-		memory_resource(inputBuf, r);
-		const unsigned int cycles_write_block = (OFMDim_x * ConvKernelDim_x * ConvKernelDim_y * multiplying_factor);
-		const unsigned int cycles_read_block = Stride_x * IFMDim_x * multiplying_factor;
-		//const unsigned int max_cycles = MAX(cycles_write_block,cycles_read_block);
-		const unsigned int baseIter = ConvKernelDim_x*multiplying_factor + cycles_write_block;
-		unsigned int current_line = 0;
-		unsigned int read_block = 0;
-		unsigned int inp = 0, ofm_y = 0, ofm_x = 0, k_x = 0, count_simd =0;
-		#pragma HLS reset variable=inp
-		for (unsigned int count_image = 0; count_image < numReps; count_image++) {
-			for (unsigned int i = 0; i < baseIter; i++) {
-				#pragma HLS PIPELINE II=1
-				if (inp < ConvKernelDim_x * multiplying_factor) {// Initial buffer of ConvKernelDim lines
+	CASSERT_DATAFLOW(IFMChannels % SIMD == 0);
+	const unsigned int multiplying_factor = IFMChannels/SIMD;
+	ap_uint<SIMD*Input_precision> inputBuf[Stride_x * IFMDim_x * multiplying_factor];
+	#pragma HLS ARRAY_PARTITION variable=inputBuf complete dim=1
+	memory_resource(inputBuf, r);
+	const unsigned int cycles_write_block = (OFMDim_x * ConvKernelDim_x * multiplying_factor);
+	const unsigned int cycles_read_block = ConvKernelDim_x*multiplying_factor;
+	const unsigned int baseIter = cycles_read_block + cycles_write_block;
+	unsigned int current_line = 0;
+	unsigned int inp = 0, ofm_x = 0, k_x = 0, count_simd =0;
+	#pragma HLS reset variable=inp
+	for (unsigned int count_image = 0; count_image < numReps; count_image++) {
+		for (unsigned int i = 0; i < baseIter; i++) {
+			#pragma HLS PIPELINE II=1
+			if (inp < cycles_read_block) {// Initial buffer of ConvKernelDim lines
+				ap_uint<SIMD*Input_precision> inElem;
+				inElem = in.read();
+				inputBuf[current_line] = inElem;
+				current_line++;
+				inp++;
+			}
+			else {
+				unsigned int current_line_in_block = (ofm_x*Stride_x + k_x)*multiplying_factor + count_simd;
+				ap_uint<SIMD*Input_precision> outElem = inputBuf[(current_line_in_block)];
+				out.write(outElem);
+				k_x++;
+				if (k_x == ConvKernelDim_x) {
+					k_x = 0;
+					count_simd++;
+					if (count_simd == multiplying_factor) {
+						count_simd=0;
+						ofm_x ++;
+						if (ofm_x == OFMDim_x) {
+							ofm_x = 0;
+							inp = 0;
+						}
+					}
+				}
+				if (current_line < Stride_x * IFMDim_x * multiplying_factor) { // In parallel we write in the buffer, in the current block write if we still need to
 					ap_uint<SIMD*Input_precision> inElem;
 					inElem = in.read();
 					inputBuf[current_line] = inElem;
+					#pragma AP dependence variable=inputBuf intra false
+					#pragma AP dependence variable=inputBuf inter false
 					current_line++;
-					inp++;
 				}
-				else {
-					unsigned int current_line_in_block = (ofm_x*Stride_x + k_x)*multiplying_factor + count_simd;
-					ap_uint<SIMD*Input_precision> outElem = inputBuf[(current_line_in_block)];
-					out.write(outElem);
-					k_x++;
-					if (k_x == ConvKernelDim_x) {
-						k_x = 0;
-						count_simd++;
-						if (count_simd == multiplying_factor) {
-							count_simd=0;
-							ofm_x ++;
-							if (ofm_x == OFMDim_x) {
-								ofm_x = 0;
-								ofm_y++;
-								if (ofm_y == OFMDim_y) {
-									ofm_y = 0;
-									inp = 0;
-								}
-							}
-						}
-					}
-					if (current_line < Stride_x * IFMDim_x * multiplying_factor) { // In parallel we write in the buffer, in the current block write if we still need to
-						ap_uint<SIMD*Input_precision> inElem;
-						inElem = in.read();
-						inputBuf[current_line] = inElem;
-						#pragma AP dependence variable=inputBuf intra false
-						#pragma AP dependence variable=inputBuf inter false
-						current_line++;
-					}
-				}
-			} // End base_iter
-		} // End count_image
-	} // End generator
+			}
+		} // End base_iter
+	} // End count_image
+} // End generator
 
 /**
 * \brief Sliding Window unit that produces output vectors for feeding
