@@ -1335,16 +1335,11 @@ void ConvolutionInputGenerator_NonSquare(
  * \param r			  			Resource type for the hardware implementation of the memory block
  */
 template<unsigned int ConvKernelDim_x,
-		 unsigned int ConvKernelDim_y,
 		 unsigned int IFMChannels,
 		 unsigned int Input_precision,
 		 unsigned int IFMDim_x,
-		 unsigned int IFMDim_y,
 		 unsigned int OFMDim_x,
-		 unsigned int OFMDim_y,
 		 unsigned int SIMD,
-		 unsigned int Stride_x,
-		 unsigned int Stride_y,
 		 typename R>
 void ConvolutionInputGenerator_1D_custom(
 		stream<ap_uint<SIMD*Input_precision> > & in,
