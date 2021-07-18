@@ -1346,7 +1346,7 @@ template<unsigned int ConvKernelDim_x,
 		 unsigned int Stride_x,
 		 unsigned int Stride_y,
 		 typename R>
-void ConvolutionInputGenerator_NonSquare_EXPERIMENT(
+void ConvolutionInputGenerator_1D_custom(
 		stream<ap_uint<SIMD*Input_precision> > & in,
 		stream<ap_uint<SIMD*Input_precision> > & out,
 		const unsigned int numReps,
@@ -1454,7 +1454,6 @@ void ConvolutionInputGenerator_NonSquare_dws(
 		CASSERT_DATAFLOW(IFMChannels % SIMD == 0);
 		const unsigned int multiplying_factor = IFMChannels/SIMD;
 		const unsigned int number_blocks = ConvKernelDim_y/Stride_y + 1 ;
-		//ap_uint<SIMD*Input_precision> inputBuf[number_blocks][Stride_x * IFMDim_x * multiplying_factor];
 		ap_uint<SIMD*Input_precision> inputBuf[Stride_x * IFMDim_x * multiplying_factor];
 
 		#pragma HLS ARRAY_PARTITION variable=inputBuf complete dim=1
