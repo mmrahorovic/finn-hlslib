@@ -45,7 +45,7 @@
 #include <string>
 #include "bnn-library.h"
 
-#include "input_gen_1d_custom.h"
+#include "input_gen_1D_custom.h"
 
 #include "math.h"
 using namespace hls;
@@ -53,57 +53,77 @@ using namespace std;
 
 #define MAX_IMAGES 1
 
-void Testbench(stream<ap_uint<MULTI_INPUT*IFM_Channels1*INPUT_PRECISION1> > & in, stream<MultiChanData<MMV1, IFM_Channels1*INPUT_PRECISION1> > & out); //, unsigned int numReps)
+void Testbench(stream<ap_uint<SIMD1*INPUT_PRECISION1> > & in, stream<ap_uint<SIMD1*INPUT_PRECISION1> > & out); //, unsigned int numReps)
 
 int main()
 {
 	stream<ap_uint<IFM_Channels1*INPUT_PRECISION1> > input_stream("input_stream");
 	stream<ap_uint<IFM_Channels1*INPUT_PRECISION1> > output_stream("output_stream");
+    stream<ap_uint<SIMD1*INPUT_PRECISION1> > in_simd("in_simd");
+    stream<ap_uint<SIMD1*INPUT_PRECISION1> > out_simd("out_simd");
 
-	static	ap_int<INPUT_PRECISION1> IMAGE[MAX_IMAGES][IFMDim_x][IFMDim_y][IFM_Channels1];
+	static	ap_int<INPUT_PRECISION1> IMAGE[MAX_IMAGES][IFMDim_y][IFMDim_x][IFM_Channels1];
 	int counter = 0;
 	ap_uint<IFM_Channels1*INPUT_PRECISION1> input_channel = 0;
 	for(unsigned int n_image = 0; n_image < MAX_IMAGES; n_image++) {
 		for(unsigned int x = 0; x < IFMDim_x; x++) {
-			for(unsigned int y = 0; y < IFMDim_y; y++) {
-				input_channel = 0;
-				for(unsigned int c = 0; c < IFM_Channels1; c++) {
-					ap_int<INPUT_PRECISION1> input = (ap_int<INPUT_PRECISION1>)(counter);
-					IMAGE[n_image][x][y][c]= input;
-					input_channel = input_channel >> INPUT_PRECISION1;
-					input_channel(IFM_Channels1*INPUT_PRECISION1-1,(IFM_Channels1-1)*INPUT_PRECISION1)=input;
-					counter++;
-				}
-				input_stream.write(input_channel);
+			input_channel = 0;
+			for(unsigned int c = 0; c < IFM_Channels1; c++) {
+				ap_int<INPUT_PRECISION1> input = (ap_int<INPUT_PRECISION1>)(counter);
+				IMAGE[n_image][0][x][c]= input;
+				input_channel = input_channel >> INPUT_PRECISION1;
+				input_channel(IFM_Channels1*INPUT_PRECISION1-1,(IFM_Channels1-1)*INPUT_PRECISION1)=input;
+				counter++;
 			}
+			input_stream.write(input_channel);
 		}
 	}
-	//StreamingDataWidthConverter_Batch<IFM_Channels1*INPUT_PRECISION1, MULTI_INPUT*IFM_Channels1*INPUT_PRECISION1, IFMDim_x>(input_stream, input_stream_multi, 1);
-	Testbench(input_stream, output_stream);//, MAX_IMAGES);
-	//FlattenMultiChanData<MMV1, IFM_Channels1*INPUT_PRECISION1>(output_stream_mmv, output_stream, KERNEL_DIM_x*OFMDim_x/MMV1);
-	ap_int<INPUT_PRECISION1> out_chan;
-	int expected_value;
+
+    StreamingDataWidthConverter_Batch<IFM_Channels1*INPUT_PRECISION1, SIMD1*INPUT_PRECISION1, IFMDim_x>(input_stream, in_simd, 1);
+	Testbench(in_simd, out_simd);//, MAX_IMAGES);
+    StreamingDataWidthConverter_Batch<SIMD1*INPUT_PRECISION1, IFM_Channels1*INPUT_PRECISION1, KERNEL_DIM_x*OFMDim_x*IFM_Channels1/SIMD1>(out_simd, output_stream, 1);
+
+    int expected_array[OFMDim_x*KERNEL_DIM_x*IFM_Channels1];
+    int expected_value;
+    int idx=0;
+    for(unsigned int n_image = 0; n_image < MAX_IMAGES; n_image++) {
+        for(unsigned int ox = 0; ox < OFMDim_x; ox++) {
+            for(unsigned int chan = 0; chan < IFM_Channels1/SIMD1; chan++){
+                for(unsigned int kx = 0; kx < KERNEL_DIM_x; kx++) {
+                    for(unsigned int s = 0; s < SIMD1; s++){
+                        expected_value = (ap_int<INPUT_PRECISION1>) IMAGE[n_image][0][ox+kx*1][chan*SIMD1+s];
+                        expected_array[idx] = expected_value;
+                        idx++;
+                    }
+                }
+            }
+        }
+    }
+
+    int produced_array[OFMDim_x*KERNEL_DIM_x*IFM_Channels1];
+    idx=0;
 	for(unsigned int n_image = 0; n_image < MAX_IMAGES; n_image++) {
-		for(unsigned int ox = 0; ox < OFMDim_x; ox+=MMV1) {
-			for(unsigned int oy = 0; oy < OFMDim_y; oy++) {
-                for(unsigned int chan = 0; chan < IFM_Channels1; chan++) {
-    				for(unsigned int kx = 0; kx < KERNEL_DIM_x; kx++) {
-    					for(unsigned int ky = 0; ky < KERNEL_DIM_y; ky++) {
-    						ap_uint<INPUT_PRECISION1*IFM_Channels1> outElem = output_stream.read();
-							out_chan(INPUT_PRECISION1-1,0) = outElem((chan + 1)*INPUT_PRECISION1-1,chan*INPUT_PRECISION1);
-							int output_value = (ap_int<INPUT_PRECISION1>) out_chan;
-							expected_value = (ap_int<INPUT_PRECISION1>) IMAGE[n_image][ox+kx*1][oy+ky*1][chan];
-							if (output_value != expected_value){
-								std::cout << "ERROR: Expected " << expected_value << " actual " <<  output_value << std::endl;
-								std::cout << "Position: OFMDim_x " << ox << " OFMDim_y " << oy <<  " KERNEL_DIM_x " <<  kx << " KERNEL_DIM_y " << ky << " IFM_Channels1 " <<  chan << " Image " << n_image << std::endl;
-								return 1;
-							}
-						}
-					}
+		for(unsigned int ox = 0; ox < OFMDim_x; ox++) {
+            for(unsigned int kx = 0; kx < KERNEL_DIM_x; kx++) {
+                ap_uint<INPUT_PRECISION1*IFM_Channels1> outElem = output_stream.read();
+                for(unsigned int chan = 0; chan < IFM_Channels1; chan++){
+                    ap_int<INPUT_PRECISION1> out_chan = 0;
+                    out_chan = outElem(INPUT_PRECISION1-1, 0);
+    				int output_value = (ap_int<INPUT_PRECISION1>) out_chan;
+                    produced_array[idx] = output_value;
+                    idx++;
+                    outElem = outElem >> INPUT_PRECISION1;
 				}
 			}
 		}
 	}
+
+    for(unsigned int i = 0; i < OFMDim_x*KERNEL_DIM_x*IFM_Channels1; i++){
+        if(expected_array[i]!=produced_array[i]){
+            std::cout << "ERROR: Expected " << expected_array[i] << " actual " << produced_array[i] << std::endl;
+            return 1;
+        }
+    }
 
 	return 0;
 

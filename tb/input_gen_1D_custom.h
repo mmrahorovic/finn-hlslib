@@ -33,7 +33,7 @@
 #define SIMD1 2
 #define KERNEL_DIM_x 3
 #define KERNEL_DIM_y 1
-#define IFM_Channels1 2
+#define IFM_Channels1 4
 #define IFMDim_x 1026
 #define IFMDim_y 1
 #define OFMDim_x 1024
